@@ -226,6 +226,29 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
     if openai_request.tools or openai_request.functions:
         function_declarations = []
         
+        # Helper function to clean parameters (remove $schema and other unsupported fields)
+        def clean_parameters(params):
+            """Remove fields that Gemini API doesn't support"""
+            if not isinstance(params, dict):
+                return params
+            
+            # Deep copy to avoid modifying original
+            import copy
+            cleaned = copy.deepcopy(params)
+            
+            # Remove $schema if present
+            if "$schema" in cleaned:
+                del cleaned["$schema"]
+            
+            # Recursively clean nested objects
+            for key, value in cleaned.items():
+                if isinstance(value, dict):
+                    cleaned[key] = clean_parameters(value)
+                elif isinstance(value, list):
+                    cleaned[key] = [clean_parameters(item) if isinstance(item, dict) else item for item in value]
+            
+            return cleaned
+        
         # Convert OpenAI tools to Gemini function declarations
         if openai_request.tools:
             for tool in openai_request.tools:
@@ -235,9 +258,9 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                         "name": func.get("name"),
                         "description": func.get("description", ""),
                     }
-                    # Add parameters if present
+                    # Add parameters if present (cleaned)
                     if func.get("parameters"):
-                        gemini_func["parameters"] = func["parameters"]
+                        gemini_func["parameters"] = clean_parameters(func["parameters"])
                     function_declarations.append(gemini_func)
         
         # Support legacy OpenAI functions format
@@ -248,7 +271,7 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                     "description": func.get("description", ""),
                 }
                 if func.get("parameters"):
-                    gemini_func["parameters"] = func["parameters"]
+                    gemini_func["parameters"] = clean_parameters(func["parameters"])
                 function_declarations.append(gemini_func)
         
         # Wrap all function declarations in a single tool object
