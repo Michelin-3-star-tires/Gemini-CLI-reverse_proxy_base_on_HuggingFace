@@ -38,33 +38,46 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                 tool_call_map[tc.get("id")] = tc.get("function", {}).get("name", "unknown_function")
     
     # Process each message in the conversation
-    for message in openai_request.messages:
+    # Group consecutive tool messages together
+    i = 0
+    while i < len(openai_request.messages):
+        message = openai_request.messages[i]
         role = message.role
         
         # Handle tool response messages (role="tool")
+        # Collect all consecutive tool messages and combine them into one user message
         if role == "tool":
-            # Tool results must be sent as functionResponse parts in a "user" role message
-            # Get function name from multiple sources
-            func_name = (
-                getattr(message, 'name', None) or  # First try message.name
-                (tool_call_map.get(getattr(message, 'tool_call_id', None)) if getattr(message, 'tool_call_id', None) else None) or  # Then lookup by tool_call_id
-                "unknown_function"  # Fallback
-            )
+            tool_response_parts = []
             
-            # Parse response content
-            try:
-                response_data = json.loads(message.content) if isinstance(message.content, str) else message.content
-            except (json.JSONDecodeError, TypeError):
-                # If parsing fails, wrap in a result object
-                response_data = {"result": str(message.content)}
+            # Collect all consecutive tool messages
+            while i < len(openai_request.messages) and openai_request.messages[i].role == "tool":
+                tool_msg = openai_request.messages[i]
+                
+                # Get function name from multiple sources
+                func_name = (
+                    getattr(tool_msg, 'name', None) or  # First try message.name
+                    (tool_call_map.get(getattr(tool_msg, 'tool_call_id', None)) if getattr(tool_msg, 'tool_call_id', None) else None) or  # Then lookup by tool_call_id
+                    "unknown_function"  # Fallback
+                )
+                
+                # Parse response content
+                try:
+                    response_data = json.loads(tool_msg.content) if isinstance(tool_msg.content, str) else tool_msg.content
+                except (json.JSONDecodeError, TypeError):
+                    # If parsing fails, wrap in a result object
+                    response_data = {"result": str(tool_msg.content)}
+                
+                tool_response_parts.append({
+                    "functionResponse": {
+                        "name": func_name,
+                        "response": response_data
+                    }
+                })
+                
+                i += 1
             
-            parts = [{
-                "functionResponse": {
-                    "name": func_name,
-                    "response": response_data
-                }
-            }]
-            contents.append({"role": "user", "parts": parts})
+            # Add all tool responses as a single user message
+            contents.append({"role": "user", "parts": tool_response_parts})
             continue
         
         # Map OpenAI roles to Gemini roles
@@ -93,6 +106,7 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                         }
                     })
                 contents.append({"role": role, "parts": parts})
+                i += 1
                 continue
         elif role == "system":
             role = "user"  # Gemini treats system messages as user messages
@@ -201,6 +215,9 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                 if tail:
                     parts.append({"text": tail})
             contents.append({"role": role, "parts": parts if parts else [{"text": text}]})
+        
+        # Move to next message
+        i += 1
     
     # Map OpenAI generation parameters to Gemini format
     generation_config = {}
