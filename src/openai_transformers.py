@@ -224,7 +224,7 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
     
     # Handle OpenAI tools/functions
     if openai_request.tools or openai_request.functions:
-        gemini_tools = []
+        function_declarations = []
         
         # Convert OpenAI tools to Gemini function declarations
         if openai_request.tools:
@@ -238,7 +238,7 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                     # Add parameters if present
                     if func.get("parameters"):
                         gemini_func["parameters"] = func["parameters"]
-                    gemini_tools.append({"functionDeclarations": [gemini_func]})
+                    function_declarations.append(gemini_func)
         
         # Support legacy OpenAI functions format
         elif openai_request.functions:
@@ -249,9 +249,10 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
                 }
                 if func.get("parameters"):
                     gemini_func["parameters"] = func["parameters"]
-                gemini_tools.append({"functionDeclarations": [gemini_func]})
+                function_declarations.append(gemini_func)
         
-        request_payload["tools"] = gemini_tools
+        # Wrap all function declarations in a single tool object
+        request_payload["tools"] = [{"functionDeclarations": function_declarations}]
         
         # Handle tool_choice / function_call
         if openai_request.tool_choice:
