@@ -4,8 +4,11 @@ from typing import List, Optional, Union, Dict, Any
 # OpenAI Models
 class OpenAIChatMessage(BaseModel):
     role: str
-    content: Union[str, List[Dict[str, Any]]]
+    content: Union[str, List[Dict[str, Any]], None]
     reasoning_content: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_call_id: Optional[str] = None
+    name: Optional[str] = None
 
 class OpenAIChatCompletionRequest(BaseModel):
     model: str
@@ -20,6 +23,11 @@ class OpenAIChatCompletionRequest(BaseModel):
     n: Optional[int] = None
     seed: Optional[int] = None
     response_format: Optional[Dict[str, Any]] = None
+    # Function calling parameters
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+    functions: Optional[List[Dict[str, Any]]] = None  # Legacy
+    function_call: Optional[Union[str, Dict[str, Any]]] = None  # Legacy
     
     class Config:
         extra = "allow"  # Allow additional fields not explicitly defined
@@ -39,6 +47,7 @@ class OpenAIChatCompletionResponse(BaseModel):
 class OpenAIDelta(BaseModel):
     content: Optional[str] = None
     reasoning_content: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
 
 class OpenAIChatCompletionStreamChoice(BaseModel):
     index: int
