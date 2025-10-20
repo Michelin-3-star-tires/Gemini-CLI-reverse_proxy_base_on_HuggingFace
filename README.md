@@ -1,3 +1,13 @@
+---
+title: Gemini API Proxy
+emoji: 🤖
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_file: app.py
+pinned: false
+---
+
 # geminicli2api 本地部署研究项目
 
 ## 项目简介
