@@ -30,6 +30,13 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
     """
     contents = []
     
+    # Build a map of tool_call_id to function name for later lookup
+    tool_call_map = {}
+    for msg in openai_request.messages:
+        if msg.role == "assistant" and msg.tool_calls:
+            for tc in msg.tool_calls:
+                tool_call_map[tc.get("id")] = tc.get("function", {}).get("name", "unknown_function")
+    
     # Process each message in the conversation
     for message in openai_request.messages:
         role = message.role
@@ -37,10 +44,24 @@ def openai_request_to_gemini(openai_request: OpenAIChatCompletionRequest) -> Dic
         # Handle tool response messages (role="tool")
         if role == "tool":
             # Tool results must be sent as functionResponse parts in a "user" role message
+            # Get function name from multiple sources
+            func_name = (
+                getattr(message, 'name', None) or  # First try message.name
+                (tool_call_map.get(getattr(message, 'tool_call_id', None)) if getattr(message, 'tool_call_id', None) else None) or  # Then lookup by tool_call_id
+                "unknown_function"  # Fallback
+            )
+            
+            # Parse response content
+            try:
+                response_data = json.loads(message.content) if isinstance(message.content, str) else message.content
+            except (json.JSONDecodeError, TypeError):
+                # If parsing fails, wrap in a result object
+                response_data = {"result": str(message.content)}
+            
             parts = [{
                 "functionResponse": {
-                    "name": message.name,  # Function name
-                    "response": json.loads(message.content) if isinstance(message.content, str) else message.content
+                    "name": func_name,
+                    "response": response_data
                 }
             }]
             contents.append({"role": "user", "parts": parts})
